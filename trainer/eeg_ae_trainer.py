@@ -120,14 +120,15 @@ class EEGAETrainer(BaseTrainer):
 
                 eeg, image, label = data
                 
-                latent, rec = self.MODEL(eeg.to(gpu))
+                with torch.autocast(device_type="cuda"):
+                    latent, rec = self.MODEL(eeg.to(gpu))
 
-                rec_loss    = torch.mean(torch.sum(l2(rec, eeg), dim=1))
-                sdsc_loss   = self.sdsc_loss(rec, eeg)
-                loss        =  rec_loss + self.sdsc_lambda * sdsc_loss
+                    rec_loss    = torch.mean(torch.sum(l2(rec, eeg), dim=1))
+                    sdsc_loss   = self.sdsc_loss(rec, eeg)
+                    loss        =  rec_loss + self.sdsc_lambda * sdsc_loss
 
-                mse         = self.mse(rec, eeg)
-                sdsc        = self.sdsc(rec, eeg)
+                    mse         = self.mse(rec, eeg)
+                    sdsc        = self.sdsc(rec, eeg)
 
                 self.losses["sdsc"].append(sdsc_loss.item())
                 self.losses["rec"].append(rec_loss.item())
@@ -154,7 +155,7 @@ class EEGAETrainer(BaseTrainer):
                     self.summaryWriter.add_scalar("SDSC", np.mean(self.accuracy['sdsc']), self.globalStep)
 
                     # Draw Reconstruction
-                    fig = plot_recon_figures(eeg.to('cpu').numpy(), rec.to('cpu').numpy(), self.log_dir, self.globalStep)
+                    fig = plot_recon_figures(eeg.to('cpu').numpy(), rec.to('cpu').numpy(), self.log_dir, self.globalStep, self.batch_size)
 
                     self.summaryWriter.add_figure("EEG Recon", fig, self.globalStep)
 

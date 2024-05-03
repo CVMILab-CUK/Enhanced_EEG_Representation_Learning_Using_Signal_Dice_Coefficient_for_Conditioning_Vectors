@@ -85,22 +85,42 @@ def plot_recon_figures(sample, pred, output_path, step, num_figures = 5, save=Fa
     fig.tight_layout()
     axs[0,0].set_title('Ground-truth')
     axs[0,1].set_title('Reconstruction')
+    axs[0,2].set_title('Comparison')
 
-    for ax in axs:
+    for ax, s, p in zip(axs, sample, pred):
 
-        cor = np.corrcoef([pred, sample])[0,1]
+        # cor = np.corrcoef([pred, sample])[0,1]
+        s = s.T
+        p = p.T
 
         x_axis = np.arange(0, sample.shape[-1])
         # groundtruth
-        ax[0].plot(x_axis, sample)
+        ax[0].plot(x_axis, s)
        
         # pred
-        ax[1].plot(x_axis, pred)
-        ax[1].set_ylabel('cor: %.4f'%cor, weight = 'bold')
-        ax[1].yaxis.set_label_position("right")
+        ax[1].plot(x_axis, p)
+        # ax[1].set_ylabel('cor: %.4f'%cor, weight = 'bold')
+        # ax[1].yaxis.set_label_position("right")
 
-    fig_name = f'reconst-{datetime.datetime.now().strftime("%d-%m-%Y-%H-%M-%S")}-{step}.png'
+        ax[2].plot(x_axis, s, "b")
+        ax[2].plot(x_axis, p, "r")
+    
     if save:
+        fig_name = f'reconst-{datetime.datetime.now().strftime("%d-%m-%Y-%H-%M-%S")}-{step}.png'
         fig.savefig(os.path.join(output_path, fig_name))
     plt.close(fig)
     return fig
+
+
+def plot_recon_figures_bychannels(sample, pred,  output_path, step, save=True):
+
+    for s, p in zip(sample, pred):
+        fig, axs = plt.subplots(1, 3, figsize=(15,12))
+        fig.tight_layout()
+        axs[0,0].set_title('Ground-truth')
+        axs[0,1].set_title('Reconstruction')
+        axs[0,2].set_title('Comparison')
+        if save:
+            fig_name = f'reconst-{datetime.datetime.now().strftime("%d-%m-%Y-%H-%M-%S")}-{step}.png'
+            fig.savefig(os.path.join(output_path, fig_name))
+        plt.close(fig)
