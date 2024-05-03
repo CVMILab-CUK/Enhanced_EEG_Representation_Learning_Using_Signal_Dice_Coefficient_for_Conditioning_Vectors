@@ -3,6 +3,7 @@ import torch.nn as nn
 
 class SignalDice(nn.Module):
     def __init__(self, eps=1e-6):
+        super(SignalDice,self).__init__()
         self.eps = eps
     
     def calc_inter(self, a, b, same_sign_mat):

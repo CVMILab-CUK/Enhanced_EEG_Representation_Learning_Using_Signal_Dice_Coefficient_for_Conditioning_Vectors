@@ -33,6 +33,7 @@
     "down_mode" : "linear",
     "up_mode" : "trans",
     "pos_mode" : "trunc",
+    "skip_mode" : "conv",
     "n_layer" : 2,
     "n_head"  : 64,
     "dff_factor" : 2,

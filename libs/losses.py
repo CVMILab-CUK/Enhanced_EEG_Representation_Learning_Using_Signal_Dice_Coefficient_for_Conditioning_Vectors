@@ -13,6 +13,7 @@ def l2(x, y):
 class SignalDiceLoss(nn.Module):
 
     def __init__(self, sep=True,  eps=1e-6):
+        super(SignalDiceLoss, self).__init__()
         self.sdsc = SignalDice(eps)
         self.sep = sep
     
