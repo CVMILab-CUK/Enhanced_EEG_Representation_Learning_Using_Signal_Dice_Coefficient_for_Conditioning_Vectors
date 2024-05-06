@@ -18,6 +18,51 @@ import importlib
 import cv2
 from .utils import *
 
+class EEGPrepDataset:
+
+    # Constructor
+    @timechecker
+    def __init__(self, eeg_pre_path, eeg_data_path, transforms=None):
+        # Load EEG signals
+        print("Start Load...")
+        # loaded = torch.load(eeg_signals_path)
+
+        # split_loaded = torch.load(split_path)
+        # if opt.subject!=0:
+        #     self.data = [loaded['dataset'][i] for i in range(len(loaded['dataset']) ) if loaded['dataset'][i]['subject']==0]
+        # # else:
+        # self.data=loaded['dataset']        
+        # self.labels = loaded["labels"]
+        # self.images = loaded["images"]
+        self.image_path = eeg_data_path
+        self.data = glob.glob(os.path.join(eeg_pre_path, "*"))
+
+        # Compute size
+        self.dataset_size = len(self.data)
+
+        
+        # Transforms
+        self.transforms = transforms
+        self.to_tensor  = ToTensor()
+
+    # Get size
+    def __len__(self):
+        return self.dataset_size
+
+    # Get item
+    def __getitem__(self, i):
+
+        loaded = torch.load(self.data[i])
+        # Process EEG
+        eeg = loaded["eeg"]
+
+        # Get label        
+        label = loaded["label"]
+   
+        
+        # Return
+        return eeg, label
+
 class EEGPreDataset:
 
     # Constructor

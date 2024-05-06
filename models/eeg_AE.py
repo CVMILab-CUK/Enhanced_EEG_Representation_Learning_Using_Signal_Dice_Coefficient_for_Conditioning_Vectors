@@ -45,6 +45,9 @@ class eeg_encoder(nn.Module):
         
         # Make Channel's List
         channels = [(dims[i], dims[i+1]) for i in range(len(dims) -1)]
+        eeg_channels = [int((in_channels/2)//(stride**idx)) for idx in range(len(channels))]
+        eeg_channels.insert(0, in_channels)
+
 
         # Set Positional Encoding
         if pos_mode == "sinusoidal":
@@ -75,10 +78,10 @@ class eeg_encoder(nn.Module):
         else:
             self.skips= None
             self.skips_agg = None
-
+        
         # Set Down Sample Block
         downsample = partial(DownSampleBlock, mode=down_mode, stride=stride)
-
+        
         
         # Set Main Flow's First Block
         proj =[block(dims[0], dims[0]) for _ in range(n_layer)]
@@ -86,12 +89,12 @@ class eeg_encoder(nn.Module):
         proj = nn.ModuleList(proj)
         
         # Set Main Flow's Other Block
-        self.main_flow = [proj]
+        self.main_flow = nn.ModuleList([proj])
 
         if stride == 4:
-            self.downs     = [downsample(dims[0], dims[0], stride=stride//2)]
+            self.downs     = nn.ModuleList([downsample(dims[0], dims[0], stride=stride//2)]) if not down_mode == "linear" else nn.ModuleList([downsample(eeg_channels[0], eeg_channels[1], stride=stride)])
         else:
-            self.downs     = [downsample(dims[0], dims[0])]
+            self.downs     = nn.ModuleList([downsample(dims[0], dims[0])])
 
         # down 1
         in_channels /= 2
@@ -120,19 +123,20 @@ class eeg_encoder(nn.Module):
             if idx +1 == len(channels):
                 self.downs.append(nn.Identity())
             else:
-                self.downs.append(downsample(dim_out, dim_out))
+                if down_mode == "linear":
+                    self.downs.append(downsample(eeg_channels[idx+1], eeg_channels[idx+2]))
+                else:
+                    self.downs.append(downsample(dim_out, dim_out))
                 # If add Skip connection
-            
-        print(self.skips)
-        print(self.skips_agg)
 
     def forward(self, x):
+        # device = x.get_device()
         h = x
 
-        print("inputs : ",h.shape)
+        # print("inputs : ",h.shape)
         h = self.in_layer(h)
         skip_h = []
-        print(f"After In Layer : {h.shape}")
+        # print(f"After In Layer : {h.shape}")
 
         for idx, (proj, down) in enumerate(zip(self.main_flow, self.downs)):
             
@@ -143,17 +147,17 @@ class eeg_encoder(nn.Module):
                 if (block_idx +1) == len(proj):
                     h += self.posEmbed[idx]
                     h, attn = proj[block_idx](h)
-                    print(f"BLOCK {idx} after attn : {h.shape}")  
+                    # print(f"BLOCK {idx} after attn : {h.shape}")  
 
                 else:
                     h = proj[block_idx](h)
-                    print(f"BLOCK {idx} after block{block_idx} : {h.shape}")
+                    # print(f"BLOCK {idx} after block{block_idx} : {h.shape}")
 
             if self.skips:
                 skip_h.append(self.skips[idx](h))
             # DownSampling
             h = down(h)
-            print(f"BLOCK {idx} after down block : {h.shape}")
+            # print(f"BLOCK {idx} after down block : {h.shape}")
 
         h = self.out_layer(h)
         if self.skips_agg:
@@ -161,7 +165,7 @@ class eeg_encoder(nn.Module):
             h = self.skips_agg(torch.cat(skip_h, 2))
         else:
             skip_h.reverse()
-        print(f"After Out Layer : {h.shape}")
+        # print(f"After Out Layer : {h.shape}")
         return h, skip_h
 
 class eeg_decoder(nn.Module):
@@ -214,6 +218,7 @@ class eeg_decoder(nn.Module):
         self.posEmbed.reverse()
         channels.reverse()
         seqeunces.reverse()
+        # self.posEmbed = [s.cuda() for s in self.posEmbed]
 
         # Set Layer's
         if layer_mode == "linear":
@@ -248,12 +253,12 @@ class eeg_decoder(nn.Module):
             proj.append(block(dims[-1], dims[-1]))
         proj.append(attn_block(dims[-1], dims[-1], dff=dims[-1] * dff_factor, in_channels=seqeunces[0]))
         
-        self.main_flow = [proj]
-        self.ups       = []
+        self.main_flow = nn.ModuleList([proj])
+        self.ups       = nn.ModuleList([])
         for idx, (dim_in, dim_out) in enumerate(channels):
             is_last = (idx +1) == len(channels)
             # dim_dff = dim_in * 2 if skip_mode == "conv" else dim_in       # If skip to concat in channel pow 2 
-            # print(dim_dff)
+            # # print(dim_dff)
             # Expand Dimension Block Mustbe Included
             proj = nn.ModuleList([])
             proj.append(block(dim_in, dim_out))
@@ -284,14 +289,15 @@ class eeg_decoder(nn.Module):
             self.ups.append(upsample(stride=stride))
         
     def forward(self, x, skips=None):
+        # device = x.get_device()
         h = x
-        print("inputs : ",h.shape)
+        # print("inputs : ",h.shape)
         h = self.in_layer(h)
-        print(f"After In Layer : {h.shape}")
+        # print(f"After In Layer : {h.shape}")
         for idx, (proj, up) in enumerate(zip(self.main_flow, self.ups)):  
             if skips:
                 h = torch.cat([h,skips[idx]], dim=1)          
-            print(f"BLOCK {idx} after concat : {h.shape}")
+            # print(f"BLOCK {idx} after concat : {h.shape}")
             # Main Block
             for block_idx in range(len(proj)):
                 # If block_idx +1 == len(proj) is mean, it is last block for one dimension => Transformer Block
@@ -299,16 +305,16 @@ class eeg_decoder(nn.Module):
                 if (block_idx +1) == len(proj):
                     h += self.posEmbed[idx]
                     h, attn = proj[block_idx](h)  
-                    print(f"BLOCK {idx} after attn : {h.shape}")      
+                    # print(f"BLOCK {idx} after attn : {h.shape}")      
                 else:
                     h = proj[block_idx](h)        
-                    print(f"BLOCK {idx} after block{block_idx} : {h.shape}")
+                    # print(f"BLOCK {idx} after block{block_idx} : {h.shape}")
     
             # UpSampling
             h = up(h)
-            print(f"BLOCK {idx} after up block : {h.shape}")
+            # print(f"BLOCK {idx} after up block : {h.shape}")
         h = self.out_layer(h)
-        print(f"After Out Layer : {h.shape}")
+        # print(f"After Out Layer : {h.shape}")
         return h
 
 class eeg_AutoEncoder(nn.Module):
@@ -349,16 +355,16 @@ class eeg_AutoEncoder(nn.Module):
         
 
     def forward(self, x):
-        z = self.Encoder(x)
-        rec = self.Decoder(z)
+        z, skips = self.Encoder(x)
+        rec = self.Decoder(z, skips)
         return z, rec
 
 
 
 if __name__ == "__main__":
     en = eeg_encoder()
-    print([pos.shape for pos in en.posEmbed])
+    # print([pos.shape for pos in en.posEmbed])
 
     inputs = torch.randn(1, 440, 128)
     outputs = en(inputs)
-    print(outputs.shape)
+    # print(outputs.shape)

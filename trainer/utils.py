@@ -90,10 +90,8 @@ def plot_recon_figures(sample, pred, output_path, step, num_figures = 5, save=Fa
     for ax, s, p in zip(axs, sample, pred):
 
         # cor = np.corrcoef([pred, sample])[0,1]
-        s = s.T
-        p = p.T
 
-        x_axis = np.arange(0, sample.shape[-1])
+        x_axis = np.arange(0, sample.shape[1])
         # groundtruth
         ax[0].plot(x_axis, s)
        

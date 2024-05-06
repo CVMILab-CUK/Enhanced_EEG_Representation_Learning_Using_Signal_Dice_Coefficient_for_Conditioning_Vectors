@@ -88,16 +88,19 @@ class EEGAETrainer(BaseTrainer):
                                     self.block_mode, self.down_mode, self.up_mode, self.pos_mode, self.skip_mode, 
                                     self.n_layer, self.n_head, self.dff_factor, self.stride).to(gpu)
         
+        self.MODEL.Encoder.posEmbed = [p.to(gpu) for p in self.MODEL.Encoder.posEmbed]
+        self.MODEL.Decoder.posEmbed = [p.to(gpu) for p in self.MODEL.Decoder.posEmbed]
         self.optim = torch.optim.AdamW(filter(lambda x: x.requires_grad, self.MODEL.parameters()), lr= self.lr, betas=[0, 0.99])
-        self.sdsc_loss = SignalDiceLoss(sep=True)
+        self.sdsc_loss = SignalDiceLoss(sep=True).to(gpu)
         self.mse  = nn.MSELoss()
-        self.sdsc = SignalDice()
+        # self.sdsc = SignalDice()
 
         
     def _train(self, gpu, size):
         print(f"Now Initialize Rank: {gpu} | Number Of GPU : {size}")
         self.model_define(gpu)        
         self.initialize(gpu, size)
+        torch.cuda.set_device(gpu)
 
         self.MODEL = nn.SyncBatchNorm.convert_sync_batchnorm(DDP(self.MODEL))
         self.makeDatasets(self.eeg_train_path, self.eeg_test_path, self.eeg_val_path, self.img_path)
@@ -121,32 +124,33 @@ class EEGAETrainer(BaseTrainer):
                 self.MODEL.train()
                 self.optim.zero_grad()
 
-                eeg, image, label = data
+                eeg, label = data
+                eeg = eeg.to(gpu)
+                b, _, _ = eeg.size()
                 
                 with torch.autocast(device_type="cuda"):
-                    latent, rec = self.MODEL(eeg.to(gpu))
+                    latent, rec = self.MODEL(eeg)
 
                     rec_loss    = torch.mean(torch.sum(l2(rec, eeg), dim=1))
                     sdsc_loss   = self.sdsc_loss(rec, eeg)
                     loss        =  rec_loss + self.sdsc_lambda * sdsc_loss
 
                     mse         = self.mse(rec, eeg)
-                    sdsc        = self.sdsc(rec, eeg)
-
+                    sdsc        = self.sdsc_loss.sdsc(rec, eeg)
+                loss.backward()
+                self.optim.step()
+                
                 self.losses["sdsc"].append(sdsc_loss.item())
                 self.losses["rec"].append(rec_loss.item())
                 self.losses["loss"].append(loss.item())
 
                 self.accuracy["mse"].append(mse.item())
                 self.accuracy['sdsc'].append(sdsc.item())
-
-                loss.backward()
-                self.optim.step()
-
-                if self.globalStep % self.logIter == 0:
+                    
+                if self.globalStep % self.logIter == 0 and gpu ==0:
                     # LOG Print
                     strings = f"Train Step {self.globalStep} | LOSS {np.mean(self.losses['loss']):.4f} | SDSC LOSS {np.mean(self.losses['sdsc']):.4f} | RECON LOSS {np.mean(self.losses['rec']):.4f}"
-                    strings += f" Accuracy MSE {np.mean(self.losses['mse']):.4f} | SDSC {np.mean(self.losses['sdsc']):.4f}"
+                    strings += f" Accuracy MSE {np.mean(self.accuracy['mse']):.4f} | SDSC {np.mean(self.accuracy['sdsc']):.4f}"
                     print(strings)
                     
                     # Tensorboard logged
@@ -158,37 +162,36 @@ class EEGAETrainer(BaseTrainer):
                     self.summaryWriter.add_scalar("SDSC", np.mean(self.accuracy['sdsc']), self.globalStep)
 
                     # Draw Reconstruction
-                    fig = plot_recon_figures(eeg.to('cpu').numpy(), rec.to('cpu').numpy(), self.log_dir, self.globalStep, self.batch_size)
+                    fig = plot_recon_figures(eeg.to('cpu').detach().numpy(), rec.detach().to('cpu').numpy(), self.log_dir, self.globalStep, num_figures=b)
 
                     self.summaryWriter.add_figure("EEG Recon", fig, self.globalStep)
                     self.losses = {"sdsc":[], "rec":[], "loss":[]}
                     self.accuracy = {"sdsc":[], "mse":[]}
                 
                 if self.globalStep % self.validIter == 0:
-                    self._valid()
+                    self._valid(gpu)
                     self.checkPoint(gpu)
 
                 self.globalStep += 1
 
     @torch.no_grad()
-    def _valid(self):
-
-        self.val_losses = {"sdsc":[], "rec":[], "loss":[]}
-        self.val_accuracy = {"sdsc":[], "mse":[]}
+    def _valid(self, gpu):
 
         self.MODEL.eval()
         for step, data in enumerate(self.loader_test):
-            eeg, image, label = data
+            eeg, label = data
+            eeg = eeg.to(gpu)
+            b, _, _ = eeg.size()
                 
             with torch.autocast(device_type="cuda"):
-                latent, rec = self.MODEL(eeg.to(gpu))
+                latent, rec = self.MODEL(eeg)
 
                 rec_loss    = torch.mean(torch.sum(l2(rec, eeg), dim=1))
                 sdsc_loss   = self.sdsc_loss(rec, eeg)
                 loss        =  rec_loss + self.sdsc_lambda * sdsc_loss
 
                 mse         = self.mse(rec, eeg)
-                sdsc        = self.sdsc(rec, eeg)
+                sdsc        = self.sdsc_loss.sdsc(rec, eeg)
 
             self.val_losses["sdsc"].append(sdsc_loss.item())
             self.val_losses["rec"].append(rec_loss.item())
@@ -197,23 +200,26 @@ class EEGAETrainer(BaseTrainer):
             self.val_accuracy["mse"].append(mse.item())
             self.val_accuracy['sdsc'].append(sdsc.item())
 
-        # LOG Print
-        strings = f"Valid Step {self.globalStep} | LOSS {np.mean(self.val_losses['loss']):.4f} | SDSC LOSS {np.mean(self.val_losses['sdsc']):.4f} | RECON LOSS {np.mean(self.val_losses['rec']):.4f}"
-        strings += f" Accuracy MSE {np.mean(self.val_accuracy['mse']):.4f} | SDSC {np.mean(self.val_accuracy['sdsc']):.4f}"
-        print(strings)
+        if gpu == 0:
+            # LOG Print
+            strings = f"Valid Step {self.globalStep} | LOSS {np.mean(self.val_losses['loss']):.4f} | SDSC LOSS {np.mean(self.val_losses['sdsc']):.4f} | RECON LOSS {np.mean(self.val_losses['rec']):.4f}"
+            strings += f" Accuracy MSE {np.mean(self.val_accuracy['mse']):.4f} | SDSC {np.mean(self.val_accuracy['sdsc']):.4f}"
+            print(strings)
         
-        # Tensorboard logged
-        self.summaryWriter.add_scalar("LOSS", np.mean(self.val_losses['loss']), self.globalStep)
-        self.summaryWriter.add_scalar("SDSC LOSS", np.mean(self.val_losses['sdsc']), self.globalStep)
-        self.summaryWriter.add_scalar("RECON LOSS", np.mean(self.val_losses['rec']), self.globalStep)
+            # Tensorboard logged
+            self.summaryWriter.add_scalar("LOSS", np.mean(self.val_losses['loss']), self.globalStep)
+            self.summaryWriter.add_scalar("SDSC LOSS", np.mean(self.val_losses['sdsc']), self.globalStep)
+            self.summaryWriter.add_scalar("RECON LOSS", np.mean(self.val_losses['rec']), self.globalStep)
 
-        self.summaryWriter.add_scalar("MSE", np.mean(self.val_accuracy['mse']), self.globalStep)
-        self.summaryWriter.add_scalar("SDSC", np.mean(self.val_accuracy['sdsc']), self.globalStep)
+            self.summaryWriter.add_scalar("MSE", np.mean(self.val_accuracy['mse']), self.globalStep)
+            self.summaryWriter.add_scalar("SDSC", np.mean(self.val_accuracy['sdsc']), self.globalStep)
 
-        # Draw Reconstruction
-        fig = plot_recon_figures(eeg.to('cpu').numpy(), rec.to('cpu').numpy(), self.log_dir, self.globalStep, self.batch_size)
+            # Draw Reconstruction
+            fig = plot_recon_figures(eeg.to('cpu').detach().numpy(), rec.to('cpu').detach().numpy(), self.log_dir, self.globalStep, num_figures=8)
 
-        self.summaryWriter.add_figure("EEG Recon", fig, self.globalStep)
+            self.summaryWriter.add_figure("EEG Recon", fig, self.globalStep)
+            self.val_losses = {"sdsc":[], "rec":[], "loss":[]}
+            self.val_accuracy = {"sdsc":[], "mse":[]}
 
 
     def checkPoint(self, gpu):

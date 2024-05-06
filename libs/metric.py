@@ -15,12 +15,14 @@ class SignalDice(nn.Module):
         return a + b
     
     def forward(self, inputs, targets):
+        device = inputs.get_device()
         # Make abs value
         in_abs = torch.abs(inputs)
         tar_abs = torch.abs(targets)
 
         # Make Heaviside Matrix
-        same_sign_mat = torch.heaviside(inputs * targets, torch.tensor([0.]))
+        with torch.no_grad():
+            same_sign_mat = torch.heaviside(inputs * targets, torch.tensor([0.], device=device))
 
         self.intersection = self.calc_inter(in_abs, tar_abs, same_sign_mat) 
         self.union        = self.calc_union(in_abs, tar_abs)

@@ -12,7 +12,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
 
 
-from datalibs import EEGDataset, EEGPreDataset, Splitter
+from datalibs import EEGPrepDataset
 
 class BaseTrainer():
     def __init__(self, ckpt_dir:str, log_dir:str, batch_size:int, sharedFilePath:str, num_workers:int=6):
@@ -49,9 +49,9 @@ class BaseTrainer():
     
     def makeDatasets(self, eeg_train_path, eeg_test_path, eeg_val_path, img_path, ddp=True):
 
-        self.train_dataset = EEGPreDataset(eeg_pre_path = eeg_train_path,  eeg_data_path = img_path)
-        self.valid_dataset = EEGPreDataset(eeg_pre_path = eeg_val_path,  eeg_data_path = img_path)
-        self.test_dataset  = EEGPreDataset(eeg_pre_path = eeg_test_path,  eeg_data_path = img_path)
+        self.train_dataset = EEGPrepDataset(eeg_pre_path = eeg_train_path,  eeg_data_path = img_path)
+        self.valid_dataset = EEGPrepDataset(eeg_pre_path = eeg_val_path,  eeg_data_path = img_path)
+        self.test_dataset  = EEGPrepDataset(eeg_pre_path = eeg_test_path,  eeg_data_path = img_path)
 
         if ddp:
             self.train_dataset_sampler = DistributedSampler(self.train_dataset)
