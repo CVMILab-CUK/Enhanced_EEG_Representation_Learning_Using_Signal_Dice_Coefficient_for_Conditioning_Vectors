@@ -26,6 +26,9 @@ class BaseTrainer():
 
         if not os.path.exists(self.ckpt_dir):
             os.mkdir(self.ckpt_dir)
+            
+        if not os.path.exists(os.path.join(self.ckpt_dir, self.name)):
+            os.mkdir(os.path.join(self.ckpt_dir, self.name))
 
         if not os.path.exists(self.log_dir):
             os.mkdir(self.log_dir)

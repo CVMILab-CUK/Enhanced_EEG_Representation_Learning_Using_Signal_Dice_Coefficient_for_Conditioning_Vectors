@@ -21,6 +21,7 @@ class EEGAETrainer(BaseTrainer):
         self.sharedFilePath = sharedFilePath
         self.startEpoch     = 0
         self.globalStep     = 0
+        self.eps            = 1e-6
         super().__init__(self.json_dict["ckpt_dir"], self.json_dict["log_dir"], self.json_dict["batch_size"], 
                          sharedFilePath, self.json_dict["num_workers"])
 
@@ -91,7 +92,7 @@ class EEGAETrainer(BaseTrainer):
         self.MODEL.Encoder.posEmbed = [p.to(gpu) for p in self.MODEL.Encoder.posEmbed]
         self.MODEL.Decoder.posEmbed = [p.to(gpu) for p in self.MODEL.Decoder.posEmbed]
         self.optim = torch.optim.AdamW(filter(lambda x: x.requires_grad, self.MODEL.parameters()), lr= self.lr, betas=[0, 0.99])
-        self.sdsc_loss = SignalDiceLoss(sep=True).to(gpu)
+        self.sdsc_loss = SignalDiceLoss(False).to(gpu)
         self.mse  = nn.MSELoss()
         # self.sdsc = SignalDice()
 
@@ -126,12 +127,12 @@ class EEGAETrainer(BaseTrainer):
 
                 eeg, label = data
                 eeg = eeg.to(gpu)
-                b, _, _ = eeg.size()
+                b, c, s = eeg.size()
                 
                 with torch.autocast(device_type="cuda"):
                     latent, rec = self.MODEL(eeg)
 
-                    rec_loss    = torch.mean(torch.sum(l2(rec, eeg), dim=1))
+                    rec_loss    = (torch.sum(l2(rec, eeg)) + self.eps) / (b * c + self.eps) 
                     sdsc_loss   = self.sdsc_loss(rec, eeg)
                     loss        =  rec_loss + self.sdsc_lambda * sdsc_loss
 
@@ -207,17 +208,17 @@ class EEGAETrainer(BaseTrainer):
             print(strings)
         
             # Tensorboard logged
-            self.summaryWriter.add_scalar("LOSS", np.mean(self.val_losses['loss']), self.globalStep)
-            self.summaryWriter.add_scalar("SDSC LOSS", np.mean(self.val_losses['sdsc']), self.globalStep)
-            self.summaryWriter.add_scalar("RECON LOSS", np.mean(self.val_losses['rec']), self.globalStep)
+            self.summaryWriter.add_scalar("VALID LOSS", np.mean(self.val_losses['loss']), self.globalStep)
+            self.summaryWriter.add_scalar("VALID SDSC LOSS", np.mean(self.val_losses['sdsc']), self.globalStep)
+            self.summaryWriter.add_scalar("VALID RECON LOSS", np.mean(self.val_losses['rec']), self.globalStep)
 
-            self.summaryWriter.add_scalar("MSE", np.mean(self.val_accuracy['mse']), self.globalStep)
-            self.summaryWriter.add_scalar("SDSC", np.mean(self.val_accuracy['sdsc']), self.globalStep)
+            self.summaryWriter.add_scalar("VALID MSE", np.mean(self.val_accuracy['mse']), self.globalStep)
+            self.summaryWriter.add_scalar("VALID SDSC", np.mean(self.val_accuracy['sdsc']), self.globalStep)
 
             # Draw Reconstruction
             fig = plot_recon_figures(eeg.to('cpu').detach().numpy(), rec.to('cpu').detach().numpy(), self.log_dir, self.globalStep, num_figures=8)
 
-            self.summaryWriter.add_figure("EEG Recon", fig, self.globalStep)
+            self.summaryWriter.add_figure("VALID EEG Recon", fig, self.globalStep)
             self.val_losses = {"sdsc":[], "rec":[], "loss":[]}
             self.val_accuracy = {"sdsc":[], "mse":[]}
 

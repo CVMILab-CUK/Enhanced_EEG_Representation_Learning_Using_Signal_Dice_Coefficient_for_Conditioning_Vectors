@@ -1,4 +1,4 @@
 __pycache__
 sharedfile
 events*
-*.ckpt
+ckpt_dir/*

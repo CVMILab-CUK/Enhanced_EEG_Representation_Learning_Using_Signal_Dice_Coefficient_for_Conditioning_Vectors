@@ -9,7 +9,7 @@
     "ckpt_dir" : "./ckpt_dir/",
     "log_dir"  : "./log",
 
-    "batch_size": 8,
+    "batch_size": 16,
     "learningRate":1e-4,
     "trainEpochs":1000,
     "saveIter"   :2000,
