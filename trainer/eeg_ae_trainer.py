@@ -132,7 +132,8 @@ class EEGAETrainer(BaseTrainer):
                     latent, rec = self.MODEL(eeg)
 
                     # rec_loss    = (torch.sum(l2(rec, eeg)) + self.eps) / (b * c + self.eps) 
-                    rec_loss    = self.mse(rec, eeg)
+                    rec_loss = torch.sum(torch.sum(l2(rec, eeg), dim=2) + self.eps) / (b*c + self.eps)
+                    # rec_loss    = self.mse(rec, eeg)
                     sdsc_loss   = self.sdsc_loss(rec, eeg)
                     loss        =  rec_loss + self.sdsc_lambda * sdsc_loss
 
