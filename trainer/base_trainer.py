@@ -66,8 +66,8 @@ class BaseTrainer():
             self.loader_test        = DataLoader(self.test_dataset,  batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True, sampler=self.test_dataset_sampler) 
         else:
             self.loader_train       = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
-            self.loader_valid       = DataLoader(self.valid_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
-            self.loader_test        = DataLoader(self.test_dataset,  batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
+            self.loader_valid       = DataLoader(self.valid_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
+            self.loader_test        = DataLoader(self.test_dataset,  batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
 
     def makeTensorBoard(self):
         self.summaryWriter = SummaryWriter(log_dir=self.log_dir)

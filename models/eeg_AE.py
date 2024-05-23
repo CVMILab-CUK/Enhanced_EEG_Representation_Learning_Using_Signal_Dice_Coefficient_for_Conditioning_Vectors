@@ -67,6 +67,7 @@ class eeg_encoder(nn.Module):
             self.in_layer = Conv1dLayer(in_channels=in_seq, out_channels=dims[0], kernel_size=1, bias=True)
             self.out_layer = Conv1dLayer(in_channels=dims[-1], out_channels=out_seq, kernel_size=1, bias=True)
 
+        # self.posEmbed = nn.ModuleList(self.posEmbed)
         # Set Skip Mode
         if skip_mode == "conv":
             self.skips = nn.ModuleList([Conv1dLayer(dims[0], dims[0], 1)])
@@ -130,7 +131,7 @@ class eeg_encoder(nn.Module):
                 # If add Skip connection
 
     def forward(self, x):
-        # device = x.get_device()
+        device = x.get_device()
         h = x
 
         # print("inputs : ",h.shape)
@@ -145,7 +146,7 @@ class eeg_encoder(nn.Module):
                 # If block_idx +1 == len(proj) is mean, it is last block for one dimension => Transformer Block
                 # So, Add Positional Encoding and run transformer blocks
                 if (block_idx +1) == len(proj):
-                    h += self.posEmbed[idx]
+                    h += self.posEmbed[idx].to(device)
                     h, attn = proj[block_idx](h)
                     # print(f"BLOCK {idx} after attn : {h.shape}")  
 
@@ -230,6 +231,7 @@ class eeg_decoder(nn.Module):
             self.out_layer = Conv1dLayer(in_channels=dims[0], out_channels=out_seq, kernel_size=1, bias=True)   
 
         self.skip_mode = skip_mode  
+        # self.posEmbed = nn.ModuleList(self.posEmbed)
 
 
         # Set up Sample Block
@@ -289,7 +291,7 @@ class eeg_decoder(nn.Module):
             self.ups.append(upsample(stride=stride))
         
     def forward(self, x, skips=None):
-        # device = x.get_device()
+        device = x.get_device()
         h = x
         # print("inputs : ",h.shape)
         h = self.in_layer(h)
@@ -303,7 +305,7 @@ class eeg_decoder(nn.Module):
                 # If block_idx +1 == len(proj) is mean, it is last block for one dimension => Transformer Block
                 # So, Add Positional Encoding and run transformer blocks
                 if (block_idx +1) == len(proj):
-                    h += self.posEmbed[idx]
+                    h += self.posEmbed[idx].to(device)
                     h, attn = proj[block_idx](h)  
                     # print(f"BLOCK {idx} after attn : {h.shape}")      
                 else:

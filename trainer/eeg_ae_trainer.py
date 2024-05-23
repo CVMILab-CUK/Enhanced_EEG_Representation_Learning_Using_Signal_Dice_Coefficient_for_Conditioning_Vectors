@@ -48,7 +48,6 @@ class EEGAETrainer(BaseTrainer):
         self.img_path           = self.json_dict["img_path"]
         self.split_path         = self.json_dict["split_path"]
 
-
         ########################################
         #            Model Setting
         ########################################
@@ -81,7 +80,7 @@ class EEGAETrainer(BaseTrainer):
         self.saveIter  = self.json_dict["saveIter"]
         self.validIter = self.json_dict["validIter"]
         self.logIter   = self.json_dict["logIter"]
-        self.restart   = bool(self.json_dict["restart"])
+        self.restart   = self.json_dict["restart"]
     
     def model_define(self, gpu):
         self.MODEL = eeg_AutoEncoder(self.in_seq,  self.in_channels, self.z_channels, self.out_seq,    
@@ -132,7 +131,8 @@ class EEGAETrainer(BaseTrainer):
                 with torch.autocast(device_type="cuda"):
                     latent, rec = self.MODEL(eeg)
 
-                    rec_loss    = (torch.sum(l2(rec, eeg)) + self.eps) / (b * c + self.eps) 
+                    # rec_loss    = (torch.sum(l2(rec, eeg)) + self.eps) / (b * c + self.eps) 
+                    rec_loss    = self.mse(rec, eeg)
                     sdsc_loss   = self.sdsc_loss(rec, eeg)
                     loss        =  rec_loss + self.sdsc_lambda * sdsc_loss
 
@@ -221,6 +221,81 @@ class EEGAETrainer(BaseTrainer):
             self.summaryWriter.add_figure("VALID EEG Recon", fig, self.globalStep)
             self.val_losses = {"sdsc":[], "rec":[], "loss":[]}
             self.val_accuracy = {"sdsc":[], "mse":[]}
+
+
+    @torch.no_grad()
+    def test(self, folder_name):
+        self.losses = {"sdsc":[], "rec":[], "loss":[]}
+        self.accuracy = {"sdsc":[], "mse":[]}
+
+
+        self.makeDatasets(self.eeg_train_path, self.eeg_test_path, self.eeg_val_path, self.img_path, ddp=False)
+
+        self.MODEL = eeg_AutoEncoder(self.in_seq,  self.in_channels, self.z_channels, self.out_seq,    
+                                    self.dims, self.shortcut, self.dropout, self.groups, self.layer_mode, 
+                                    self.block_mode, self.down_mode, self.up_mode, self.pos_mode, self.skip_mode, 
+                                    self.n_layer, self.n_head, self.dff_factor, self.stride).cuda()
+        self.sdsc_loss = SignalDiceLoss(False).cuda()
+
+        dict_model = torch.load(os.path.join(self.ckpt_dir, folder_name, f"{self.name}_{self.restart}.pth"))
+        self.MODEL.load_state_dict(dict_model["net"])
+        self.mse  = nn.MSELoss()
+
+        best_mse = 100
+        mse_best_step = 0
+        best_sdsc = 0
+        sdsc_best_step = 0
+
+        self.MODEL.eval()
+        for step, data in enumerate(self.loader_test):
+            eeg, label = data
+            eeg = eeg.cuda()
+            b, _, _ = eeg.size()
+                
+            
+            latent, rec = self.MODEL(eeg)
+
+            rec_loss    = torch.mean(torch.sum(l2(rec, eeg), dim=1)).item()
+            sdsc_loss   = self.sdsc_loss(rec, eeg).item()
+            loss        =  (rec_loss + self.sdsc_lambda * sdsc_loss)
+
+            mse         = self.mse(rec, eeg).item()
+            sdsc        = self.sdsc_loss.sdsc(rec, eeg).item()
+            print("step", step, " : ", mse, sdsc)
+            
+
+            if best_mse > mse:
+                mse_best_step = step
+                best_mse = mse
+            
+            if best_sdsc < sdsc:
+                sdsc_best_step = step
+                best_sdsc = sdsc
+
+            self.losses["sdsc"].append(sdsc_loss)
+            self.losses["rec"].append(rec_loss)
+            self.losses["loss"].append(loss)
+
+            self.accuracy["mse"].append(mse)
+            self.accuracy['sdsc'].append(sdsc)
+
+        
+        # LOG Print
+        strings = f"TEST Step {step} | LOSS {np.mean(self.losses['loss']):.4f} | SDSC LOSS {np.mean(self.losses['sdsc']):.4f} | RECON LOSS {np.mean(self.losses['rec']):.4f}"
+        strings += f" Accuracy MSE {np.mean(self.accuracy['mse']):.4f} | SDSC {np.mean(self.accuracy['sdsc']):.4f}"
+        print(strings)
+        print("==================================================================================")
+        print(f"BEST MSE : {mse_best_step} step {best_mse} MSE | BEST SDSC {sdsc_best_step} step {best_sdsc}")
+        print("==================================================================================")
+        with open("./log/result.txt", "w") as  f:
+            f.write(strings)
+            f.write("\n==================================================================================")
+            f.write(f"\nBEST MSE : {mse_best_step} step {best_mse} MSE | BEST SDSC {sdsc_best_step} step {best_sdsc}")
+            f.write("\n==================================================================================")
+
+        # Draw Reconstruction
+        # fig = plot_recon_figures(eeg.to('cpu').detach().numpy(), rec.to('cpu').detach().numpy(), self.log_dir, self.globalStep, num_figures=8)
+
 
 
     def checkPoint(self, gpu):
