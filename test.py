@@ -17,4 +17,4 @@ sharedFilePath = args.shared
 
 if __name__ =="__main__":
     Trainer = trainer(configFilePath, sharedFilePath)
-    Trainer.test(folder_name="EEG_condition_SMSE")
+    Trainer.test(folder_name="EEG_condition_SMSE_SDSC_1")

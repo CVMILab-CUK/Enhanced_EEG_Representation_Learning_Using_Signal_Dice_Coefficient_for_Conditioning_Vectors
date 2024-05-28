@@ -79,7 +79,7 @@ def load_gen(ckpt_dir,  netG,  optimG, name, epoch=None, gpu=None):
 
 
 
-def plot_recon_figures(sample, pred, output_path, step, num_figures = 5, save=False):
+def plot_recon_figures(sample, pred, output_path, num_figures = 5, name="none", save=False):
 
     fig, axs = plt.subplots(num_figures, 3, figsize=(30,15))
     fig.tight_layout()
@@ -104,21 +104,58 @@ def plot_recon_figures(sample, pred, output_path, step, num_figures = 5, save=Fa
         ax[2].plot(x_axis, p, "r")
     
     if save:
-        fig_name = f'reconst-{datetime.datetime.now().strftime("%d-%m-%Y-%H-%M-%S")}-{step}.png'
+        fig_name = f'{name}.png'
         fig.savefig(os.path.join(output_path, fig_name))
     plt.close(fig)
     return fig
 
 
-def plot_recon_figures_bychannels(sample, pred,  output_path, step, save=True):
+def plot_recon_figure(sample, pred, output_path, num_figures = 5, name="none", save=False):
 
-    for s, p in zip(sample, pred):
-        fig, axs = plt.subplots(1, 3, figsize=(15,12))
+    fig, axs = plt.subplots(num_figures, 3, figsize=(20,15))
+    fig.tight_layout()
+    axs[0].set_title('Ground-truth')
+    axs[1].set_title('Reconstruction')
+    axs[2].set_title('Comparison')
+
+    
+
+    x_axis = np.arange(0, sample.shape[1])
+    # groundtruth
+    axs[0].plot(x_axis, sample[0])
+    
+    # pred
+    axs[1].plot(x_axis, pred[0], "--")
+    # ax[1].set_ylabel('cor: %.4f'%cor, weight = 'bold')
+    # ax[1].yaxis.set_label_position("right")
+
+    axs[2].plot(x_axis, sample[0], "b")
+    axs[2].plot(x_axis, pred[0], "r--")
+
+    if save:
+        fig_name = f'{name}.png'
+        fig.savefig(os.path.join(output_path, fig_name))
+    plt.close(fig)
+    return fig
+
+
+def plot_recon_figures_bychannels(sample, pred,  output_path, name, save=True):
+
+    for idx, (s, p) in enumerate(zip(sample[0].T, pred[0].T)):
+        fig, ax = plt.subplots(1, 3, figsize=(15,12))
         fig.tight_layout()
-        axs[0,0].set_title('Ground-truth')
-        axs[0,1].set_title('Reconstruction')
-        axs[0,2].set_title('Comparison')
+        ax[0].set_title('Ground-truth')
+        ax[1].set_title('Reconstruction')
+        ax[2].set_title('Comparison')
+
+        x_axis = np.arange(0, sample.shape[1])
+        ax[0].plot(x_axis, s, "b")    
+        ax[1].plot(x_axis, p, "r:")
+        ax[2].plot(x_axis, s, "b")
+        ax[2].plot(x_axis, p, "r:")
+
+
         if save:
-            fig_name = f'reconst-{datetime.datetime.now().strftime("%d-%m-%Y-%H-%M-%S")}-{step}.png'
+            fig_name =  f'{name}_{idx}_channels.png'
             fig.savefig(os.path.join(output_path, fig_name))
         plt.close(fig)

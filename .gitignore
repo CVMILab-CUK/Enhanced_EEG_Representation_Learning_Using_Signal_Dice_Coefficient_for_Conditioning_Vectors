@@ -2,3 +2,5 @@ __pycache__
 sharedfile
 events*
 ckpt_dir/*
+.ipynb_checkpoints
+*.png
