@@ -4,7 +4,7 @@ In this paper, we investigate representation learning for acquiring condition ma
 ![model](./img/Figure1_UNet.PNG)
 __Fig. Model Overview__
 
-![example](./img/Figure2.png)
+![example](./img/Figure2.PNG)
 __Fig. Signal Dice Coeffiecient__
 
 ### Dice Coefficient(DSC)
