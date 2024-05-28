@@ -20,9 +20,11 @@ When |X| and |Y| are the cardinalities of the two sets. Inspired by this concept
 $$
 S(x) = E(x) \cdot R(x)
 $$
+
 $$
 M(x) = \frac{\{(|E(x)| + |R(x)|) - ||E(x)| -|R(x)||\}}{2}
 $$
+
 $$
 SDSC(t) = \frac{2 \times \int H(S(t)) \cdot M(t)\, dt}{ \int [E(t) + R(t)]\, dt }
 $$
