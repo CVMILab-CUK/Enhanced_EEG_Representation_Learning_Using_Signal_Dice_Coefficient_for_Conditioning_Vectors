@@ -1,4 +1,4 @@
-# Enhanced_EEG_Representation_Learning_Using_Signal_Dice_Coefficient_for_Conditioning_Vectors
+# Enhanced EEG Representation Learning Using Signal Dice Coefficient for Conditioning Vectors
 In this paper, we investigate representation learning for acquiring condition matrices usable in the field of image generation based on electroencephalogram (EEG) signals. we employ the Signal Dice Coefficient, a new metric inspired by semantic segmentation techniques, for evaluation. The Signal Dice Coefficient effectively measures the fidelity of EEG representations and enhances performance when used as a loss metric. 
 
 ![model](./img/Figure1_UNet.PNG)
